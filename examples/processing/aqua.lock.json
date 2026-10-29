@@ -1,0 +1,27 @@
+{
+  "Format": 1,
+  "ManifestHash": "ee113cf2f42a30d87a88304326c79be330d499de322171740848d2b4d94466ce",
+  "Direct": {
+    "Aqua_Embedded_LSP_Editor": "aqua_embedded_lsp_editor/1.0.0"
+  },
+  "Packages": [
+    {
+      "Name": "Aqua_Embedded_LSP_Editor",
+      "Version": "1.0.0",
+      "Hash": "13142b2c3534c40c9a1089a5977d28046d4e6b040a9f913fa6054c5aab8aae1d",
+      "Source": "path:C:\\OfficialProjects\\Aqua_Embedded_LSP_Editor\\aqua.toml",
+      "Dependencies": {
+        "Aqua_JSON-RPC": "aqua_json-rpc/1.0.0"
+      },
+      "Key": "aqua_embedded_lsp_editor/1.0.0"
+    },
+    {
+      "Name": "Aqua_JSON-RPC",
+      "Version": "1.0.0",
+      "Hash": "288ad909e038acb64def9c753b2fa6eeb9dfef30575a2751774444ba9caeb203",
+      "Source": "path:C:\\OfficialProjects\\Aqua_JSON-RPC\\aqua.toml",
+      "Dependencies": {},
+      "Key": "aqua_json-rpc/1.0.0"
+    }
+  ]
+}

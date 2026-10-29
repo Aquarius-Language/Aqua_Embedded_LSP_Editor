@@ -1,0 +1,12 @@
+manifest_version = 1
+
+[project]
+name = "AquaEditor_Processing"
+type = "executable"
+version = "1.0.0"
+entry = "main.aqua"
+sources = ["main.aqua"]
+platforms = ["windows", "linux", "web", "android"]
+
+[dependencies]
+Aqua_Embedded_LSP_Editor = { path = "../..", version = "1.0.0" }

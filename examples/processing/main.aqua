@@ -1,0 +1,43 @@
+# 以 Processing 繪製的編輯器（桌面、網頁、Android）。內建語言伺服器提供自動完成、說明與診斷。
+# The editor drawn with Processing (desktop, web, Android), with the built-in language server's completion, hover
+# and diagnostics. Ctrl+Space suggests; right click (or a long press) opens the context menu.
+var p = import("Processing");
+var ix = import("Interaction");
+var ed = import("AquaEditor");
+
+var editor = null;
+var font = null;
+var last = 0.0d;
+var editorFont = function() { p.textFont(font); p.textSize(15); };
+var painter = {
+    "rect": function(x, y, w, h, c) { p.fill(c[0], c[1], c[2]); p.rect(x, y, w, h); },
+    "text": function(x, y, t, c) { p.fill(c[0], c[1], c[2]); p.text(t, x, y + 2); },
+    "line": function(x1, y1, x2, y2, c) { p.stroke(c[0], c[1], c[2]); p.line(x1, y1, x2, y2); p.noStroke(); },
+    "clip": function(x, y, w, h) { p.clip(x, y, w, h); },
+    "unclip": function() { p.noClip(); }
+};
+
+var setup = function() {
+    p.size(900, 600, p.P2D, "AquaEditor + Processing");
+    font = p.createFont("monospace", 15);
+    p.textAlign(p.LEFT, p.TOP);
+    p.noStroke();
+    editor = ed.CreateEditor({"text": "變數 問候 = 非同步 函式(名字) {\n    等待 承諾.延遲(10);\n    回傳 \"你好，\" + 名字;\n};\n印出(等待 問候(\"星泉\"));\n",
+        "lineHeight": 22, "measure": function(t) { editorFont(); return p.textWidth(t); }});
+    ed.SetText(editor, import("String").Replace(ed.Text(editor), "\\n", import("String").FromCode(10)));
+    ed.Place(editor, 0, 0, p.width, p.height);
+    ed.Attach(editor, ix.Attach(p.platformWindow));
+    p.on("windowResized", function() { ed.Place(editor, 0, 0, p.width, p.height); });
+    var connecting = ed.UseBuiltInLanguageServer(editor);
+    last = currentTime();
+};
+
+var draw = function() {
+    var now = currentTime();
+    ed.Update(editor, (now - last) / 1000.0d);
+    last = now;
+    editorFont();
+    ed.Paint(ed.RenderModel(editor), painter);
+};
+
+p.run(setup, draw);
