@@ -103,6 +103,27 @@ key(67, 2);
 key(262, 0);
 check("collapse right", ed.HasSelection(editor), false);
 
+# 輸入法組字：未確定的文字畫在游標處，後面的文字右移；按鍵屬於輸入法；確定後才插入。
+# Composition: the uncommitted text is drawn at the caret and pushes the rest right; keys belong to the input method.
+ed.SetCursor(editor, 0, 4);
+var before = ed.Text(editor);
+session.Feed({"type": "composition", "phase": "start"});
+session.Feed({"type": "composition", "text": "ㄒㄧㄥ", "cursor": 2});
+session.Dispatch();
+key(259, 0);
+var composing = ed.RenderModel(editor);
+var runs = composing["lines"][0]["runs"];
+var composed = 陣列.篩選(runs, function(r) { return r["kind"] == "composition"; });
+check("composition run", [長度(composed), composed[0]["text"], composing["composition"]["cursor"]], [1, "ㄒㄧㄥ", 2]);
+check("composition caret", composing["caret"]["x"] > composed[0]["x"], true);
+check("composition keys", ed.Text(editor), before);
+session.Feed({"type": "composition", "phase": "end"});
+session.Feed({"type": "text", "text": "星"});
+session.Dispatch();
+check("committed", 字串.切片(ed.Text(editor), 0, 7), "var 星數量");
+check("composition over", ed.RenderModel(editor)["composition"], null);
+key(90, 2);
+
 # 繪製：畫筆收到矩形、文字與線。 / Painting: the painter gets rects, texts and lines.
 var counts = {"rect": 0, "text": 0, "line": 0};
 var painter = {

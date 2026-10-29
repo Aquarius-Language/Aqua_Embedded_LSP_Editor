@@ -24,8 +24,9 @@ struct Editor {
     focused; blinkStart; blinkTime; readOnly;
     clipboard; onChange; onCommand; menu; dragging; lastClick;
     pointerX; pointerY; pointerTime; hoverAsked; theme; autoClose;
-    session; textInput; textRect
+    session; textInput; textRect; composition; compositionCursor; areaName; areaKey
 }
+var _editorCount = 0;
 
 var _newline = String.FromCode(10);
 # 以 "鍵" 取雜湊表成員（struct 欄位上的雜湊表不能直接 ["鍵"](...) 呼叫）。 / A hash member, for calling one held in a field.
@@ -76,7 +77,9 @@ var Create = function(options) {
         true, 0.0d, conventions.caretBlinkTime * 1.0d, opt("readOnly", "唯讀", false),
         opt("clipboard", "剪貼簿", null), null, null, null, false, [0.0d, -1, -1, 0],
         -1.0d, -1.0d, 0.0d, false, opt("theme", "主題", theme), opt("autoClose", "自動配對", true),
-        null, false, "");
+        null, false, "", "", 0, "", "");
+    _editorCount++;
+    editor.areaName = "editor" + String.From(_editorCount);
     editor.menu = ContextMenu.Create(function(command) { RunCommand(editor, command); });
     _layoutContent(editor);
     return editor;
@@ -449,14 +452,31 @@ var HandleEvent = function(editor, e) {
     if (ContextMenu.Handle(editor.menu, e)) { return true; }
     var t = e.type;
     if (t == "command") { return RunCommand(editor, e.command); }
-    if (t == "key") { if (!editor.focused) { return false; } return HandleKey(editor, e); }
+    if (t == "key") {
+        if (!editor.focused) { return false; }
+        # 組字中的按鍵屬於輸入法。 / Keys while composing belong to the input method.
+        if (editor.composition != "") { return true; }
+        return HandleKey(editor, e);
+    }
     if (t == "text") {
         if (!editor.focused || e.text == null) { return false; }
         if (String.Code(e.text, 0) < 32 || String.Code(e.text, 0) == 127) { return false; }
         Type(editor, e.text);
         return true;
     }
-    if (t == "composition") { return editor.focused; }
+    # 輸入法組字（注音、拼音、假名…）：未確定的文字畫在游標處並加底線，確定後以 "text" 事件送來。
+    # Input-method composition: the text not yet committed shows underlined at the caret; it arrives as "text" when committed.
+    if (t == "composition") {
+        if (!editor.focused) { return false; }
+        var composed = e.text;
+        if (composed == null || e.phase == "end") { composed = ""; }
+        editor.composition = composed;
+        editor.compositionCursor = len(composed);
+        if (e.cursor != null && e.cursor >= 0 && e.cursor <= len(composed)) { editor.compositionCursor = e.cursor; }
+        if (composed != "") { editor.completion = null; }
+        _restartBlink(editor);
+        return true;
+    }
     if (t == "move") {
         editor.pointerX = e.x; editor.pointerY = e.y; editor.pointerTime = currentTime(); editor.hoverAsked = false;
         if (editor.hover != null && !_near(editor, e.x, e.y)) { editor.hover = null; }
@@ -465,7 +485,7 @@ var HandleEvent = function(editor, e) {
     }
     if (ScrollView.Handle(editor.view, e)) { return true; }
     if (e.x != null && !ScrollView.Contains(editor.view, e.x, e.y)) {
-        if (t == "press") { editor.focused = false; editor.completion = null; }
+        if (t == "press") { editor.focused = false; editor.completion = null; editor.composition = ""; }
         return false;
     }
     if (t == "press" && e.button == 0) {
@@ -512,6 +532,33 @@ var Attach = function(editor, session) {
     return session.On("*", function(e) { return HandleEvent(editor, e); });
 };
 
+# 游標形狀：文字上是文字游標，行號欄、捲軸與浮動視窗上是箭頭。 / Cursor shapes: the text cursor over the text, the
+# arrow over the line numbers, the scrollbars and popups.
+var _cursorAreas = function(editor) {
+    var view = editor.view;
+    var gutter = GutterWidth(editor);
+    var areas = [["text", view.left + gutter, view.top, view.width - gutter, view.height, "text"]];
+    var bars = [ScrollView.VerticalBar(view), ScrollView.HorizontalBar(view)];
+    for (var i = 0; i < 2; i++) { if (bars[i].visible) { Array.Append(areas, ["bar" + String.From(i), bars[i].x, bars[i].y, bars[i].width, bars[i].height, "arrow"]); } }
+    if (editor.completion != null) {
+        var box = CompletionBox(editor);
+        Array.Append(areas, ["completion", box[0], box[1], box[2], box[3], "arrow"]);
+    }
+    if (editor.menu.open) { Array.Append(areas, ["menu", editor.menu.x, editor.menu.y, editor.menu.width, ContextMenu.Height(editor.menu), "arrow"]); }
+    var parts = [];
+    for (var i = 0; i < len(areas); i++) { Array.Append(parts, String.Join(Array.Map(areas[i], function(v) { return String.From(v); }), ",")); }
+    var key = String.Join(parts, ";");
+    if (key == editor.areaKey) { return false; }
+    var names = ["text", "bar0", "bar1", "completion", "menu"];
+    for (var i = 0; i < len(names); i++) { editor.session.RemoveCursorArea(editor.areaName + "." + names[i]); }
+    for (var i = 0; i < len(areas); i++) {
+        var a = areas[i];
+        editor.session.CursorArea(editor.areaName + "." + a[0], a[1], a[2], a[3], a[4], a[5]);
+    }
+    editor.areaKey = key;
+    return true;
+};
+
 var _near = function(editor, x, y) {
     if (editor.hover == null) { return false; }
     return y >= editor.hover["y"] - editor.lineHeight && y <= editor.hover["y"] + editor.lineHeight * 2.0d;
@@ -529,6 +576,7 @@ var Update = function(editor, seconds) {
             var rect = String.From(int(point[0])) + "," + String.From(int(point[1]));
             if (rect != editor.textRect) { editor.textRect = rect; editor.session.TextRect(int(point[0]), int(point[1]), 2, int(editor.lineHeight)); }
         }
+        _cursorAreas(editor);
     }
     if (editor.client != null && !editor.hoverAsked && editor.pointerX >= 0 && currentTime() - editor.pointerTime > 600.0d
         && ScrollView.Contains(editor.view, editor.pointerX, editor.pointerY)) {
@@ -666,6 +714,38 @@ var _tokensFor = function(editor) {
     return editor.tokens;
 };
 
+# 浮動視窗的大小（每個字約 7.5 單位寬）。 / A popup's size (about 7.5 units per character).
+var PopupSize = function(rows, lineHeight) {
+    var width = 120.0d;
+    for (var i = 0; i < len(rows); i++) { var w = len(rows[i]) * 7.5d + 16.0d; if (w > width) { width = w; } }
+    if (width > 520.0d) { width = 520.0d; }
+    return [width, len(rows) * (lineHeight + 2.0d) + 6.0d];
+};
+# 自動完成清單可見的列（最多 8 列，捲到選定項）與第一列的索引。 / The completion list's visible rows (up to 8,
+# scrolled to the selected item) and the index of the first.
+var CompletionRows = function(completion) {
+    var items = completion["items"];
+    var first = 0;
+    if (completion["selected"] >= 8) { first = completion["selected"] - 7; }
+    var rows = [];
+    for (var i = first; i < len(items) && i < first + 8; i++) {
+        var detail = items[i]["detail"];
+        var row = items[i]["label"];
+        if (detail != null && detail != "" && detail != row) {
+            if (len(detail) > 48) { detail = String.Slice(detail, 0, 48) + "…"; }
+            row = row + "    " + detail;
+        }
+        Array.Append(rows, row);
+    }
+    return [rows, first];
+};
+# 自動完成清單的 [x, y, 寬, 高]。 / The completion list's [x, y, width, height].
+var CompletionBox = function(editor) {
+    var start = PointOf(editor, buffers.Pos(editor.completion["line"], editor.completion["start"]));
+    var size = PopupSize(CompletionRows(editor.completion)[0], editor.lineHeight);
+    return [start[0], start[1] + editor.lineHeight, size[0], size[1]];
+};
+
 var CaretVisible = function(editor) {
     if (!editor.focused) { return false; }
     if (editor.blinkTime <= 0) { return true; }
@@ -688,16 +768,34 @@ var RenderModel = function(editor) {
     for (var l = first; l < last; l++) {
         var text = buffers.Line(editor.buffer, l);
         var y = view.top + l * editor.lineHeight - view.y;
-        var runs = [];
+        var pieces = [];
         var at = 0;
         var lineTokens = tokens[l];
         for (var t = 0; t < len(lineTokens); t++) {
             var token = lineTokens[t];
-            if (token[0] > at) { Array.Append(runs, {"x": textLeft + TextWidth(editor, String.Slice(text, 0, at)), "text": String.Slice(text, at, token[0]), "kind": "text"}); }
-            Array.Append(runs, {"x": textLeft + TextWidth(editor, String.Slice(text, 0, token[0])), "text": String.Slice(text, token[0], token[1]), "kind": token[2]});
+            if (token[0] > at) { Array.Append(pieces, [at, token[0], "text"]); }
+            Array.Append(pieces, [token[0], token[1], token[2]]);
             at = token[1];
         }
-        if (at < len(text)) { Array.Append(runs, {"x": textLeft + TextWidth(editor, String.Slice(text, 0, at)), "text": String.Slice(text, at, len(text)), "kind": "text"}); }
+        if (at < len(text)) { Array.Append(pieces, [at, len(text), "text"]); }
+        # 組字中的文字插在游標處，後面的文字往右移。 / Composed text goes in at the caret, pushing the rest right.
+        var composing = editor.composition != "" && l == editor.cursor.line;
+        var split = editor.cursor.character;
+        var shift = 0.0d;
+        if (composing) { shift = TextWidth(editor, editor.composition); }
+        var runs = [];
+        for (var k = 0; k < len(pieces); k++) {
+            var piece = pieces[k];
+            var parts = [piece];
+            if (composing && piece[0] < split && piece[1] > split) { parts = [[piece[0], split, piece[2]], [split, piece[1], piece[2]]]; }
+            for (var q = 0; q < len(parts); q++) {
+                var part = parts[q];
+                var x = textLeft + TextWidth(editor, String.Slice(text, 0, part[0]));
+                if (composing && part[0] >= split) { x += shift; }
+                Array.Append(runs, {"x": x, "text": String.Slice(text, part[0], part[1]), "kind": part[2]});
+            }
+        }
+        if (composing) { Array.Append(runs, {"x": textLeft + TextWidth(editor, String.Slice(text, 0, split)), "text": editor.composition, "kind": "composition"}); }
         Array.Append(lines, {"number": l + 1, "y": y, "runs": runs, "current": l == editor.cursor.line});
     }
     var selections = [];
@@ -737,6 +835,12 @@ var RenderModel = function(editor) {
             "severity": severity, "message": diagnostic["message"], "line": l});
     }
     var caretPoint = PointOf(editor, editor.cursor);
+    var composition = null;
+    if (editor.composition != "") {
+        composition = {"x": caretPoint[0], "y": caretPoint[1], "width": TextWidth(editor, editor.composition), "height": editor.lineHeight,
+            "text": editor.composition, "cursor": editor.compositionCursor};
+        caretPoint = [caretPoint[0] + TextWidth(editor, String.Slice(editor.composition, 0, editor.compositionCursor)), caretPoint[1]];
+    }
     var completion = null;
     if (editor.completion != null) {
         var start = PointOf(editor, buffers.Pos(editor.completion["line"], editor.completion["start"]));
@@ -749,6 +853,7 @@ var RenderModel = function(editor) {
         "left": view.left, "top": view.top, "width": view.width, "height": view.height,
         "gutterWidth": gutter, "lineHeight": editor.lineHeight, "lines": lines,
         "caret": {"x": caretPoint[0], "y": caretPoint[1], "height": editor.lineHeight, "visible": CaretVisible(editor)},
+        "composition": composition,
         "selections": selections, "diagnostics": marks, "completion": completion, "hover": editor.hover,
         "signature": signature, "menu": editor.menu, "verticalBar": ScrollView.VerticalBar(view),
         "horizontalBar": ScrollView.HorizontalBar(view), "theme": editor.theme, "focused": editor.focused

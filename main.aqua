@@ -141,6 +141,9 @@ var 繪製, Paint = function(model, painter) {
             if (up) { line(x0, m["y"] + 1.0d, x0 + 4.0d, m["y"] - 1.0d, c); } else { line(x0, m["y"] - 1.0d, x0 + 4.0d, m["y"] + 1.0d, c); }
         }
     }
+    # 輸入法組字中的文字加底線。 / Text being composed by an input method is underlined.
+    var composition = model["composition"];
+    if (composition != null) { rect(composition["x"], composition["y"] + composition["height"] - 3.0d, composition["width"], 1.5d, color("composition")); }
     var caret = model["caret"];
     if (caret["visible"]) { rect(caret["x"], caret["y"], 2, caret["height"], theme["caret"]); }
     # 行號欄（蓋在文字上，水平捲動時不動）。 / The line numbers (over the text, fixed while scrolling sideways).
@@ -165,10 +168,9 @@ var 繪製, Paint = function(model, painter) {
     if (painter["unclip"] != null) { painter["unclip"](); }
     # 浮動視窗：參數提示、說明、自動完成、右鍵選單。 / Popups: signature, hover, completion, context menu.
     var popup = function(x, y, lines, selected) {
-        var width = 120.0d;
-        for (var i = 0; i < len(lines); i++) { var w = len(lines[i]) * 7.5d + 16.0d; if (w > width) { width = w; } }
-        if (width > 520.0d) { width = 520.0d; }
-        var height = len(lines) * (lineHeight + 2.0d) + 6.0d;
+        var size = editors.PopupSize(lines, lineHeight);
+        var width = size[0];
+        var height = size[1];
         rect(x - 1.0d, y - 1.0d, width + 2.0d, height + 2.0d, theme["popupBorder"]);
         rect(x, y, width, height, theme["popup"]);
         for (var i = 0; i < len(lines); i++) {
@@ -186,18 +188,8 @@ var 繪製, Paint = function(model, painter) {
     if (hover != null) { popup(hover["x"], hover["y"], 字串.分割(hover["text"], 字串.從字元碼(10)), -1); }
     var completion = model["completion"];
     if (completion != null) {
-        var items = completion["items"];
-        var first = 0;
-        if (completion["selected"] >= 8) { first = completion["selected"] - 7; }
-        var rows = [];
-        for (var i = first; i < len(items) && i < first + 8; i++) {
-            var detail = items[i]["detail"];
-            var row = items[i]["label"];
-            if (detail != null && detail != "" && detail != row) { if (長度(detail) > 48) { detail = 字串.切片(detail, 0, 48) + "…"; }
-                row = row + "    " + detail; }
-            陣列.追加(rows, row);
-        }
-        popup(completion["x"], completion["y"], rows, completion["selected"] - first);
+        var visible = editors.CompletionRows(completion);
+        popup(completion["x"], completion["y"], visible[0], completion["selected"] - visible[1]);
     }
     var menu = model["menu"];
     if (menu.open) {
