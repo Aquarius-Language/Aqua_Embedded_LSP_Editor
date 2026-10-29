@@ -365,7 +365,7 @@ var RunCommand = function(editor, command) {
 # ---- 鍵盤 / Keyboard ----
 var KeyEnter = 257; var KeyTab = 258; var KeyBackspace = 259; var KeyDelete = 261; var KeyRight = 262; var KeyLeft = 263;
 var KeyDown = 264; var KeyUp = 265; var KeyPageUp = 266; var KeyPageDown = 267; var KeyHome = 268; var KeyEnd = 269;
-var KeySpace = 32;
+var KeySpace = 32; var KeyPadEnter = 335;
 
 var _moveVertical = function(editor, lines, extend) {
     var point = PointOf(editor, editor.cursor);
@@ -384,6 +384,7 @@ var _moveVertical = function(editor, lines, extend) {
 var HandleKey = function(editor, e) {
     if (e.action == "release") { return false; }
     var key = e.key;
+    if (key == KeyPadEnter) { key = KeyEnter; }   # 數字鍵盤的 Enter。 / The keypad's Enter.
     var shift = e.shift == true;
     var word = e.primary == true || e.alt == true;
     if (editor.completion != null) {
