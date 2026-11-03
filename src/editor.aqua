@@ -35,6 +35,8 @@ var _newline = String.FromCode(10);
 var _member = function(table, name) { return table[name]; };
 # 不超出範圍的切片。 / A slice clamped to the text.
 var _slice = function(text, start, end) {
+    if (text == null) { return ""; }
+    if (start < 0) { start = 0; }
     if (end > len(text)) { end = len(text); }
     if (start > end) { return ""; }
     return String.Slice(text, start, end);
@@ -138,9 +140,10 @@ var Place = function(editor, left, top, width, height) {
 };
 
 # 位置的視窗座標（游標左上角）。 / The window coordinates of a position (the caret's top left).
-var PointOf = function(editor, p) {
+var PointOf = function(editor, at) {
+    var p = buffers.Clamp(editor.buffer, at);
     var line = buffers.Line(editor.buffer, p.line);
-    var x = editor.view.left + GutterWidth(editor) + editor.padding + TextWidth(editor, String.Slice(line, 0, p.character)) - editor.view.x;
+    var x = editor.view.left + GutterWidth(editor) + editor.padding + TextWidth(editor, _slice(line, 0, p.character)) - editor.view.x;
     var y = editor.view.top + p.line * editor.lineHeight - editor.view.y;
     return [x, y];
 };
@@ -153,7 +156,7 @@ var PositionAt = function(editor, x, y) {
     var target = x - editor.view.left - GutterWidth(editor) - editor.padding + editor.view.x;
     var previous = 0.0d;
     for (var i = 0; i < len(text); i++) {
-        var next = TextWidth(editor, String.Slice(text, 0, i + 1));
+        var next = TextWidth(editor, _slice(text, 0, i + 1));
         if (target < (previous + next) / 2.0d) { return buffers.Pos(line, i); }
         previous = next;
     }
@@ -197,6 +200,16 @@ var _restartBlink = function(editor) { editor.blinkStart = currentTime(); };
 # ---- 編輯 / Editing ----
 var _changed = function(editor, changes) {
     editor.tokens = null;
+    # 位置相依的浮動視窗與診斷：超出文字的丟掉（語言伺服器會依新文字重送）。 / Things tied to positions: drop the ones
+    # past the text (the language server sends new diagnostics for the new text).
+    var lines = LineCount(editor);
+    if (editor.completion != null && editor.completion["line"] >= lines) { editor.completion = null; }
+    if (editor.hover != null && editor.hover["line"] >= lines) { editor.hover = null; }
+    var kept = [];
+    for (var d = 0; d < len(editor.diagnostics); d++) {
+        if (editor.diagnostics[d]["range"]["start"]["line"] < lines) { Array.Append(kept, editor.diagnostics[d]); }
+    }
+    editor.diagnostics = kept;
     _layoutContent(editor);
     _reveal(editor);
     _restartBlink(editor);
@@ -261,7 +274,7 @@ var Type = function(editor, text) {
 var NewLine = function(editor) {
     var indent = buffers.Indentation(editor.buffer, editor.cursor.line);
     var line = buffers.Line(editor.buffer, editor.cursor.line);
-    var before = String.Trim(String.Slice(line, 0, editor.cursor.character));
+    var before = String.Trim(_slice(line, 0, editor.cursor.character));
     var after = _slice(line, editor.cursor.character, editor.cursor.character + 1);
     if (String.EndsWith(before, "{") || String.EndsWith(before, "(") || String.EndsWith(before, "[")) {
         if (after == "}" || after == ")" || after == "]") {
@@ -281,11 +294,11 @@ var Backspace = function(editor) {
     if (p.character == 0) { return DeleteRange(editor, buffers.Pos(p.line - 1, len(buffers.Line(editor.buffer, p.line - 1))), p); }
     var line = buffers.Line(editor.buffer, p.line);
     # 刪掉一個縮排單位；刪掉空的配對括號。 / Remove one indent unit; remove an empty bracket pair.
-    var head = String.Slice(line, 0, p.character);
+    var head = _slice(line, 0, p.character);
     if (String.Trim(head) == "" && p.character >= len(editor.tabText) && p.character % len(editor.tabText) == 0) {
         return DeleteRange(editor, buffers.Pos(p.line, p.character - len(editor.tabText)), p);
     }
-    var previous = String.Slice(line, p.character - 1, p.character);
+    var previous = _slice(line, p.character - 1, p.character);
     var next = _slice(line, p.character, p.character + 1);
     if (_pairs[previous] != null && _pairs[previous] == next) { return DeleteRange(editor, buffers.Pos(p.line, p.character - 1), buffers.Pos(p.line, p.character + 1)); }
     var step = 1;
@@ -525,7 +538,7 @@ var ToggleComment = function(editor) {
         if (String.Trim(text) == "") { continue; }
         var lead = len(buffers.Indentation(editor.buffer, l));
         if (indent < 0 || lead < indent) { indent = lead; }
-        if (!String.StartsWith(String.Slice(text, lead, len(text)), "#")) { commented = false; }
+        if (!String.StartsWith(_slice(text, lead, len(text)), "#")) { commented = false; }
     }
     if (indent < 0) { return true; }
     var out = [];
@@ -535,11 +548,11 @@ var ToggleComment = function(editor) {
         if (String.Trim(text) == "") { Array.Append(out, text); continue; }
         if (commented) {
             var lead = len(buffers.Indentation(editor.buffer, l));
-            var cut = if (String.StartsWith(String.Slice(text, lead, len(text)), "# ")) { 2; } else { 1; };
-            Array.Append(out, String.Slice(text, 0, lead) + String.Slice(text, lead + cut, len(text)));
+            var cut = if (String.StartsWith(_slice(text, lead, len(text)), "# ")) { 2; } else { 1; };
+            Array.Append(out, _slice(text, 0, lead) + _slice(text, lead + cut, len(text)));
             if (l == editor.cursor.line) { shift = -cut; }
         } else {
-            Array.Append(out, String.Slice(text, 0, indent) + "# " + String.Slice(text, indent, len(text)));
+            Array.Append(out, _slice(text, 0, indent) + "# " + _slice(text, indent, len(text)));
             if (l == editor.cursor.line) { shift = 2; }
         }
     }
@@ -563,7 +576,7 @@ var IndentLines = function(editor, outdent) {
             var lead = len(buffers.Indentation(editor.buffer, l));
             delta = -lead;
             if (lead > len(editor.tabText)) { delta = -len(editor.tabText); }
-            Array.Append(out, String.Slice(text, -delta, len(text)));
+            Array.Append(out, _slice(text, -delta, len(text)));
         } else {
             delta = len(editor.tabText);
             Array.Append(out, editor.tabText + text);
@@ -594,20 +607,20 @@ var JumpToBracket = function(editor) {
     var p = editor.cursor;
     var line = buffers.Line(editor.buffer, p.line);
     var at = -1;
-    if (p.character < len(line) && String.Find(_opens + _closes, String.Slice(line, p.character, p.character + 1)) >= 0) { at = p.character; }
-    elif (p.character > 0 && String.Find(_opens + _closes, String.Slice(line, p.character - 1, p.character)) >= 0) { at = p.character - 1; }
+    if (p.character < len(line) && String.Find(_opens + _closes, _slice(line, p.character, p.character + 1)) >= 0) { at = p.character; }
+    elif (p.character > 0 && String.Find(_opens + _closes, _slice(line, p.character - 1, p.character)) >= 0) { at = p.character - 1; }
     if (at < 0) { return true; }
-    var c = String.Slice(line, at, at + 1);
+    var c = _slice(line, at, at + 1);
     var open = String.Find(_opens, c);
     var forward = open >= 0;
-    var mate = if (forward) { String.Slice(_closes, open, open + 1); } else { String.Slice(_opens, String.Find(_closes, c), String.Find(_closes, c) + 1); };
+    var mate = if (forward) { _slice(_closes, open, open + 1); } else { _slice(_opens, String.Find(_closes, c), String.Find(_closes, c) + 1); };
     var depth = 0;
     var l = p.line;
     var i = at;
     for (; l >= 0 && l < LineCount(editor);) {
         var text = buffers.Line(editor.buffer, l);
         for (; i >= 0 && i < len(text);) {
-            var ch = String.Slice(text, i, i + 1);
+            var ch = _slice(text, i, i + 1);
             if (ch == c) { depth++; }
             elif (ch == mate) {
                 depth = depth - 1;
@@ -632,7 +645,7 @@ var Transpose = function(editor) {
     var at = p.character;
     if (at >= len(line)) { at = len(line) - 1; }
     if (at <= 0) { return true; }
-    var swapped = String.Slice(line, at, at + 1) + String.Slice(line, at - 1, at);
+    var swapped = _slice(line, at, at + 1) + _slice(line, at - 1, at);
     var change = buffers.Edit(editor.buffer, buffers.Pos(p.line, at - 1), buffers.Pos(p.line, at + 1), swapped);
     editor.cursor = change.newEnd;
     _changed(editor, [change]);
@@ -991,7 +1004,7 @@ var AcceptCompletion = function(editor) {
     editor.anchor = start;
     Insert(editor, text);
     if (stop >= 0) { SetCursor(editor, buffers.PositionOf(editor.buffer, buffers.OffsetOf(editor.buffer, start) + stop), false); }
-    if (String.EndsWith(text, "()") || (snippet && stop >= 1 && String.Slice(text, stop - 1, stop) == "(")) { _afterTyping(editor, "("); }
+    if (String.EndsWith(text, "()") || (snippet && stop >= 1 && _slice(text, stop - 1, stop) == "(")) { _afterTyping(editor, "("); }
     return true;
 };
 
@@ -1006,11 +1019,11 @@ var _expandSnippet = function(text) {
         if (c == 36 && i + 1 < len(text)) {
             var d = String.Code(text, i + 1);
             if (d == 123) {
-                var close = String.Find(String.Slice(text, i, len(text)), "}");
-                var inner = String.Slice(text, i + 2, i + close);
+                var close = String.Find(_slice(text, i, len(text)), "}");
+                var inner = _slice(text, i + 2, i + close);
                 var colon = String.Find(inner, ":");
                 var value = "";
-                if (colon >= 0) { value = String.Slice(inner, colon + 1, len(inner)); }
+                if (colon >= 0) { value = _slice(inner, colon + 1, len(inner)); }
                 if (stop < 0) { stop = length; }
                 Array.Append(parts, value);
                 length += len(value);
@@ -1023,7 +1036,7 @@ var _expandSnippet = function(text) {
                 continue;
             }
         }
-        Array.Append(parts, String.Slice(text, i, i + 1));
+        Array.Append(parts, _slice(text, i, i + 1));
         length++;
         i++;
     }
@@ -1057,7 +1070,7 @@ var CompletionRows = function(completion) {
         var detail = items[i]["detail"];
         var row = items[i]["label"];
         if (detail != null && detail != "" && detail != row) {
-            if (len(detail) > 48) { detail = String.Slice(detail, 0, 48) + "…"; }
+            if (len(detail) > 48) { detail = _slice(detail, 0, 48) + "…"; }
             row = row + "    " + detail;
         }
         Array.Append(rows, row);
@@ -1115,12 +1128,12 @@ var RenderModel = function(editor) {
             if (composing && piece[0] < split && piece[1] > split) { parts = [[piece[0], split, piece[2]], [split, piece[1], piece[2]]]; }
             for (var q = 0; q < len(parts); q++) {
                 var part = parts[q];
-                var x = textLeft + TextWidth(editor, String.Slice(text, 0, part[0]));
+                var x = textLeft + TextWidth(editor, _slice(text, 0, part[0]));
                 if (composing && part[0] >= split) { x += shift; }
-                Array.Append(runs, {"x": x, "text": String.Slice(text, part[0], part[1]), "kind": part[2]});
+                Array.Append(runs, {"x": x, "text": _slice(text, part[0], part[1]), "kind": part[2]});
             }
         }
-        if (composing) { Array.Append(runs, {"x": textLeft + TextWidth(editor, String.Slice(text, 0, split)), "text": editor.composition, "kind": "composition"}); }
+        if (composing) { Array.Append(runs, {"x": textLeft + TextWidth(editor, _slice(text, 0, split)), "text": editor.composition, "kind": "composition"}); }
         Array.Append(lines, {"number": l + 1, "y": y, "runs": runs, "current": l == editor.cursor.line});
     }
     var selections = [];
@@ -1133,8 +1146,8 @@ var RenderModel = function(editor) {
             var to = len(text);
             if (l == range[0].line) { from = range[0].character; }
             if (l == range[1].line) { to = range[1].character; }
-            var x0 = textLeft + TextWidth(editor, String.Slice(text, 0, from));
-            var x1 = textLeft + TextWidth(editor, String.Slice(text, 0, to));
+            var x0 = textLeft + TextWidth(editor, _slice(text, 0, from));
+            var x1 = textLeft + TextWidth(editor, _slice(text, 0, to));
             if (l != range[1].line) { x1 += editor.charWidth; }
             Array.Append(selections, {"x": x0, "y": view.top + l * editor.lineHeight - view.y, "width": x1 - x0, "height": editor.lineHeight});
         }
@@ -1150,8 +1163,8 @@ var RenderModel = function(editor) {
         var to = r["end"]["character"];
         if (r["end"]["line"] != l) { to = len(text); }
         if (to <= from) { to = from + 1; }
-        var x0 = textLeft + TextWidth(editor, String.Slice(text, 0, from));
-        var x1 = textLeft + TextWidth(editor, String.Slice(text, 0, to));
+        var x0 = textLeft + TextWidth(editor, _slice(text, 0, from));
+        var x1 = textLeft + TextWidth(editor, _slice(text, 0, to));
         if (x1 - x0 < editor.charWidth) { x1 = x0 + editor.charWidth; }
         var severity = "error";
         if (diagnostic["severity"] == 2) { severity = "warning"; }
@@ -1164,7 +1177,7 @@ var RenderModel = function(editor) {
     if (editor.composition != "") {
         composition = {"x": caretPoint[0], "y": caretPoint[1], "width": TextWidth(editor, editor.composition), "height": editor.lineHeight,
             "text": editor.composition, "cursor": editor.compositionCursor};
-        caretPoint = [caretPoint[0] + TextWidth(editor, String.Slice(editor.composition, 0, editor.compositionCursor)), caretPoint[1]];
+        caretPoint = [caretPoint[0] + TextWidth(editor, _slice(editor.composition, 0, editor.compositionCursor)), caretPoint[1]];
     }
     var completion = null;
     if (editor.completion != null) {

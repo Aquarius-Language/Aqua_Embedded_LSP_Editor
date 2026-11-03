@@ -21,7 +21,12 @@ var Create = function(text) {
 };
 var Text = function(buffer) { return String.Join(buffer.lines, _newline); };
 var LineCount = function(buffer) { return len(buffer.lines); };
-var Line = function(buffer, index) { return buffer.lines[index]; };
+# 一行的文字；範圍外是空字串（來自外部的位置，如語言伺服器的診斷，可能指向已不存在的行）。 / A line's text; "" outside
+# the text (positions from outside, such as a language server's diagnostics, can name lines that no longer exist).
+var Line = function(buffer, index) {
+    if (index == null || index < 0 || index >= len(buffer.lines)) { return ""; }
+    return buffer.lines[index];
+};
 var Pos = function(line, character) { return Position(line, character); };
 
 var Compare = function(a, b) {

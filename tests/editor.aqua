@@ -211,4 +211,22 @@ second = 2;
 Xhird = 3;"));
 key(260, 0);
 
+# 外來的位置不會讓畫面壞掉：語言伺服器的診斷指向已刪掉的行、貼上 CRLF 再復原，繪製模型照常產生。 / Positions from
+# outside never break drawing: diagnostics naming deleted lines, a CRLF paste undone, and the render model still comes.
+var crlf = 字串.從字元碼(13) + 字串.從字元碼(10);
+ed.SetText(editor, nl("var a = 1;
+print(a)"));
+ed.SetDiagnostics(editor, [{"range": {"start": {"line": 9, "character": 4}, "end": {"line": 9, "character": 40}}, "severity": 1, "message": "stale"},
+    {"range": {"start": {"line": 1, "character": 0}, "end": {"line": 1, "character": 400}}, "severity": 1, "message": "too long"}]);
+check("stale diagnostics draw", 長度(ed.RenderModel(editor)["lines"]) > 0, true);
+key(65, 2);
+ed.Insert(editor, "x = 1;" + crlf + "y = 2;" + crlf + "z = 3;" + crlf);
+check("crlf paste", ed.Text(editor), nl("x = 1;
+y = 2;
+z = 3;
+"));
+key(90, 2);
+check("undone", ed.Text(editor), nl("var a = 1;
+print(a)"));
+check("renders after undo", 長度(ed.RenderModel(editor)["lines"]), 2);
 if (len(failures) == 0) { print("EDITOR_OK"); } else { print("EDITOR_FAIL", failures); }
