@@ -91,11 +91,13 @@ var Create = function(options) {
 
 var Text = function(editor) { return buffers.Text(editor.buffer); };
 var LineCount = function(editor) { return buffers.LineCount(editor.buffer); };
+var IsEmpty = function(editor) { return LineCount(editor) == 1 && buffers.Line(editor.buffer, 0) == ""; };
 var OnChange = function(editor, callback) { editor.onChange = callback; };
 # 編輯器不處理的命令（儲存、開啟、新增...）交給它。 / Commands the editor does not handle (save, open, new...).
 var OnCommand = function(editor, callback) { editor.onCommand = callback; };
 var SetTheme = function(editor, theme) { editor.theme = theme; };
 var SetReadOnly = function(editor, readOnly) { editor.readOnly = readOnly; };
+var SetPlaceholder = function(editor, text) { editor.placeholder = text; };
 
 # 整份換掉（例如載入檔案）。 / Replace everything (loading a file).
 var SetText = function(editor, text) {
@@ -1187,7 +1189,7 @@ var RenderModel = function(editor) {
     }
     # 空的編輯器顯示淡色提示（不顯示孤單的行號 1）。 / An empty editor shows a faint hint (instead of a lone line number 1).
     var placeholder = null;
-    if (editor.placeholder != null && LineCount(editor) == 1 && buffers.Line(editor.buffer, 0) == "" && editor.composition == "") {
+    if (editor.placeholder != null && IsEmpty(editor) && editor.composition == "") {
         placeholder = {"x": textLeft, "y": view.top - view.y, "text": editor.placeholder};
     }
     var signature = null;

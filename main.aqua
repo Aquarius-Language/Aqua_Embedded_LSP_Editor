@@ -65,7 +65,7 @@ var 當命令, OnCommand = function(editor, callback) { return editors.OnCommand
 var 設定主題, SetTheme = function(editor, theme) { return editors.SetTheme(editor, theme); };
 var 設定唯讀, SetReadOnly = function(editor, readOnly) { return editors.SetReadOnly(editor, readOnly); };
 # 空的時候顯示的淡色提示（null 不顯示）。 / The faint hint an empty editor shows (null for none).
-var 設定提示, SetPlaceholder = function(editor, text) { editor.placeholder = text; return true; };
+var 設定提示, SetPlaceholder = function(editor, text) { return editors.SetPlaceholder(editor, text); };
 var 設定焦點, SetFocus = function(editor, focused) { editor.focused = focused; return true; };
 var 診斷, Diagnostics = function(editor) { return editor.diagnostics; };
 var 設定診斷, SetDiagnostics = function(editor, diagnostics) { return editors.SetDiagnostics(editor, diagnostics); };
@@ -104,16 +104,35 @@ var 說明, Hover = function(text, line, character) { return server.Hover(buffer
 # text(x, y, text, [r,g,b]) drawn from its top left, line(x1, y1, x2, y2, [r,g,b]), optional clip(x, y, w, h) / unclip().
 # 只畫編輯器的方框（文字、選取、游標、行號、捲軸），不含浮動視窗。 / Only the editor's box (text, selections, caret,
 # line numbers, scrollbars), without the popups.
+# 主題中某種文字的顏色（沒有就用一般文字色）。 / A theme's color for a kind of text (the plain text color if it has none).
+var _color = function(theme, kind) {
+    var c = theme[kind];
+    if (c == null) { c = theme["text"]; }
+    return c;
+};
+# 行號欄：每行的行號，或空編輯器的提示。 / The gutter: each line's number, or an empty editor's hint.
+var _paintGutter = function(model, painter) {
+    var theme = model["theme"];
+    var text = painter["text"];
+    painter["rect"](model["left"], model["top"], model["gutterWidth"], model["height"], theme["gutter"]);
+    var hint = model["placeholder"];
+    if (hint != null) {
+        text(hint["x"], hint["y"], hint["text"], _color(theme, "lineNumber"));
+        return null;
+    }
+    var lines = model["lines"];
+    for (var i = 0; i < len(lines); i++) {
+        var kind = "lineNumber";
+        if (lines[i]["current"]) { kind = "text"; }
+        text(model["left"] + 6.0d, lines[i]["y"], 字串.轉文字(lines[i]["number"]), _color(theme, kind));
+    }
+};
 var 繪製內容, PaintContent = function(model, painter) {
     var theme = model["theme"];
     var rect = painter["rect"];
     var text = painter["text"];
     var line = painter["line"];
-    var color = function(kind) {
-        var c = theme[kind];
-        if (c == null) { c = theme["text"]; }
-        return c;
-    };
+    var color = kind => _color(theme, kind);
     if (painter["clip"] != null) { painter["clip"](model["left"], model["top"], model["width"], model["height"]); }
     rect(model["left"], model["top"], model["width"], model["height"], theme["background"]);
     var lines = model["lines"];
@@ -150,17 +169,8 @@ var 繪製內容, PaintContent = function(model, painter) {
     if (composition != null) { rect(composition["x"], composition["y"] + composition["height"] - 3.0d, composition["width"], 1.5d, color("composition")); }
     var caret = model["caret"];
     if (caret["visible"]) { rect(caret["x"], caret["y"], 2, caret["height"], theme["caret"]); }
-    # 行號欄（蓋在文字上，水平捲動時不動）。 / The line numbers (over the text, fixed while scrolling sideways).
-    rect(model["left"], model["top"], model["gutterWidth"], model["height"], theme["gutter"]);
-    var hint = model["placeholder"];
-    if (hint != null) { text(hint["x"], hint["y"], hint["text"], color("lineNumber")); }
-    for (var i = 0; i < len(lines); i++) {
-        if (hint != null) { break; }
-        var number = 字串.轉文字(lines[i]["number"]);
-        var kind = "lineNumber";
-        if (lines[i]["current"]) { kind = "text"; }
-        text(model["left"] + 6.0d, lines[i]["y"], number, color(kind));
-    }
+    # 行號欄蓋在文字上，水平捲動時不動。 / The gutter goes over the text, fixed while scrolling sideways.
+    _paintGutter(model, painter);
     for (var i = 0; i < len(marks); i++) {
         rect(model["left"] + 1.0d, marks[i]["y"] - lineHeight + 4.0d, 3.0d, lineHeight - 4.0d, color(marks[i]["severity"]));
     }
@@ -182,11 +192,6 @@ var 繪製浮動視窗, PaintPopups = function(model, painter) {
     var rect = painter["rect"];
     var text = painter["text"];
     var line = painter["line"];
-    var color = function(kind) {
-        var c = theme[kind];
-        if (c == null) { c = theme["text"]; }
-        return c;
-    };
     var lineHeight = model["lineHeight"];
     # 浮動視窗：參數提示、說明、自動完成、右鍵選單。 / Popups: signature, hover, completion, context menu.
     var popup = function(x, y, lines, selected) {

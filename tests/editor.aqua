@@ -232,6 +232,13 @@ check("renders after undo", 長度(ed.RenderModel(editor)["lines"]), 2);
 # 空的編輯器顯示提示而不是孤單的行號。 / An empty editor shows its hint instead of a lone line number.
 var hinted = ed.CreateEditor({"text": "", "placeholder": "Type code here"});
 check("placeholder when empty", ed.RenderModel(hinted)["placeholder"]["text"], "Type code here");
+var drawn = [];
+ed.PaintContent(ed.RenderModel(hinted), {"rect": (x, y, w, h, c) => null, "line": (x1, y1, x2, y2, c) => null,
+    "text": (x, y, t, c) => 陣列.追加(drawn, t)});
+check("paints the hint, not the line number", [陣列.包含(drawn, "Type code here"), 陣列.包含(drawn, "1")], [true, false]);
+ed.SetPlaceholder(hinted, null);
+check("placeholder removed", ed.RenderModel(hinted)["placeholder"], null);
+ed.SetPlaceholder(hinted, "Type code here");
 ed.Insert(hinted, "x");
 check("no placeholder with text", ed.RenderModel(hinted)["placeholder"], null);
 if (len(failures) == 0) { print("EDITOR_OK"); } else { print("EDITOR_FAIL", failures); }
