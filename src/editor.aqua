@@ -26,7 +26,7 @@ struct Editor {
     focused; blinkStart; blinkTime; readOnly;
     clipboard; onChange; onCommand; menu; dragging; lastClick;
     pointerX; pointerY; pointerTime; hoverAsked; theme; autoClose;
-    session; textInput; textRect; composition; compositionCursor; areaName; areaKey; overwrite; kill
+    session; textInput; textRect; composition; compositionCursor; areaName; areaKey; overwrite; kill; placeholder
 }
 var _editorCount = 0;
 
@@ -81,7 +81,7 @@ var Create = function(options) {
         true, 0.0d, conventions.caretBlinkTime * 1.0d, opt("readOnly", "唯讀", false),
         opt("clipboard", "剪貼簿", null), null, null, null, false, [0.0d, -1, -1, 0],
         -1.0d, -1.0d, 0.0d, false, opt("theme", "主題", theme), opt("autoClose", "自動配對", true),
-        null, false, "", "", 0, "", "", false, "");
+        null, false, "", "", 0, "", "", false, "", opt("placeholder", "提示", null));
     _editorCount++;
     editor.areaName = "editor" + String.From(_editorCount);
     editor.menu = ContextMenu.Create(function(command) { RunCommand(editor, command); });
@@ -1185,13 +1185,18 @@ var RenderModel = function(editor) {
         completion = {"x": start[0], "y": start[1] + editor.lineHeight, "items": editor.completion["items"],
             "selected": editor.completion["selected"], "itemHeight": editor.lineHeight + 2.0d};
     }
+    # 空的編輯器顯示淡色提示（不顯示孤單的行號 1）。 / An empty editor shows a faint hint (instead of a lone line number 1).
+    var placeholder = null;
+    if (editor.placeholder != null && LineCount(editor) == 1 && buffers.Line(editor.buffer, 0) == "" && editor.composition == "") {
+        placeholder = {"x": textLeft, "y": view.top - view.y, "text": editor.placeholder};
+    }
     var signature = null;
     if (editor.signature != null) { signature = {"x": caretPoint[0], "y": caretPoint[1] - editor.lineHeight - 4.0d, "label": editor.signature["label"], "documentation": editor.signature["documentation"]}; }
     return {
         "left": view.left, "top": view.top, "width": view.width, "height": view.height,
         "gutterWidth": gutter, "lineHeight": editor.lineHeight, "lines": lines,
         "caret": {"x": caretPoint[0], "y": caretPoint[1], "height": editor.lineHeight, "visible": CaretVisible(editor)},
-        "composition": composition,
+        "composition": composition, "placeholder": placeholder,
         "selections": selections, "diagnostics": marks, "completion": completion, "hover": editor.hover,
         "signature": signature, "menu": editor.menu, "verticalBar": ScrollView.VerticalBar(view),
         "horizontalBar": ScrollView.HorizontalBar(view), "theme": editor.theme, "focused": editor.focused

@@ -64,6 +64,8 @@ var 當變更, OnChange = function(editor, callback) { return editors.OnChange(e
 var 當命令, OnCommand = function(editor, callback) { return editors.OnCommand(editor, callback); };
 var 設定主題, SetTheme = function(editor, theme) { return editors.SetTheme(editor, theme); };
 var 設定唯讀, SetReadOnly = function(editor, readOnly) { return editors.SetReadOnly(editor, readOnly); };
+# 空的時候顯示的淡色提示（null 不顯示）。 / The faint hint an empty editor shows (null for none).
+var 設定提示, SetPlaceholder = function(editor, text) { editor.placeholder = text; return true; };
 var 設定焦點, SetFocus = function(editor, focused) { editor.focused = focused; return true; };
 var 診斷, Diagnostics = function(editor) { return editor.diagnostics; };
 var 設定診斷, SetDiagnostics = function(editor, diagnostics) { return editors.SetDiagnostics(editor, diagnostics); };
@@ -150,7 +152,10 @@ var 繪製內容, PaintContent = function(model, painter) {
     if (caret["visible"]) { rect(caret["x"], caret["y"], 2, caret["height"], theme["caret"]); }
     # 行號欄（蓋在文字上，水平捲動時不動）。 / The line numbers (over the text, fixed while scrolling sideways).
     rect(model["left"], model["top"], model["gutterWidth"], model["height"], theme["gutter"]);
+    var hint = model["placeholder"];
+    if (hint != null) { text(hint["x"], hint["y"], hint["text"], color("lineNumber")); }
     for (var i = 0; i < len(lines); i++) {
+        if (hint != null) { break; }
         var number = 字串.轉文字(lines[i]["number"]);
         var kind = "lineNumber";
         if (lines[i]["current"]) { kind = "text"; }

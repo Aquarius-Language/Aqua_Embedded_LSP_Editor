@@ -30,7 +30,7 @@ ed.Paint(ed.RenderModel(editor), painter);    # painter: {"rect", "text", "line"
 
 | English | 繁體中文 | |
 | --- | --- | --- |
-| `CreateEditor(options)` | `建立編輯器` | `text`, `lineHeight` (20), `charWidth` (8, monospace without `measure`), `measure(text) → width`, `tabSize` (4), `uri`, `languageId` (`aquarius`), `readOnly`, `theme`, `clipboard` (`{"get", "set"}`), `autoClose` |
+| `CreateEditor(options)` | `建立編輯器` | `text`, `lineHeight` (20), `charWidth` (8, monospace without `measure`), `measure(text) → width`, `tabSize` (4), `uri`, `languageId` (`aquarius`), `readOnly`, `theme`, `clipboard` (`{"get", "set"}`), `autoClose`, `placeholder` (a faint hint an empty editor shows instead of its lone line number; `SetPlaceholder(editor, text)` changes it) |
 | `Place(editor, x, y, w, h)`, `Attach(editor, session)`, `HandleEvent(editor, event)`, `Update(editor, seconds)` | `放置`, `附加`, `處理事件`, `更新` | Layout, input, per-frame work |
 | `RenderModel(editor)`, `Paint(model, painter)` | `繪製模型`, `繪製` | Output |
 | `Text`, `SetText`, `Insert`, `Type`, `Select`, `SelectAll`, `SelectedText`, `HasSelection`, `Cursor`, `SetCursor`, `Undo`, `Redo`, `RunCommand`, `OnChange`, `OnCommand`, `SetTheme`, `SetReadOnly`, `SetFocus`, `Diagnostics`, `SetDiagnostics`, `TextWidth`, `LightTheme()`, `DarkTheme()` | `文字`, `設定文字`, `插入`, `打字`, `選取`, `全選`, `選取文字`, `有選取`, `游標`, `設定游標`, `復原`, `重做`, `執行命令`, `當變更`, `當命令`, `設定主題`, `設定唯讀`, `設定焦點`, `診斷`, `設定診斷`, `文字寬度`, `淺色主題`, `深色主題` | |

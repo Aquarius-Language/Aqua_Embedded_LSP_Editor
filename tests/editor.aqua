@@ -229,4 +229,9 @@ key(90, 2);
 check("undone", ed.Text(editor), nl("var a = 1;
 print(a)"));
 check("renders after undo", 長度(ed.RenderModel(editor)["lines"]), 2);
+# 空的編輯器顯示提示而不是孤單的行號。 / An empty editor shows its hint instead of a lone line number.
+var hinted = ed.CreateEditor({"text": "", "placeholder": "Type code here"});
+check("placeholder when empty", ed.RenderModel(hinted)["placeholder"]["text"], "Type code here");
+ed.Insert(hinted, "x");
+check("no placeholder with text", ed.RenderModel(hinted)["placeholder"], null);
 if (len(failures) == 0) { print("EDITOR_OK"); } else { print("EDITOR_FAIL", failures); }
